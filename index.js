@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
 });
 
 // Hämta jobbannonser baserat på sökning eller om ingen sökning sker
-app.get('/api/job-links', async (req, res) => {
+app.get('/api/jobs', async (req, res) => {
     try {
         if (Object.keys(req.query).length === 0) {
             // No search parameters, use JOB_LINKS_API
@@ -62,16 +62,8 @@ app.get('/api/job-links', async (req, res) => {
             res.json(filteredJobs);
         }
     } catch (error) {
-        console.error('Error fetching job links:', error);  // Log full error object
-        console.error('Error details:', {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status
-        });
-        res.status(500).json({ 
-            error: 'Failed to fetch job links',
-            details: error.message 
-        });
+        console.error('Error fetching job links:', error.message);
+        res.status(500).json({ error: 'Failed to fetch job links' });
     }
 });
 
