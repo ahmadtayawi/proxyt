@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const { all } = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -109,6 +110,52 @@ app.get('/api/jobs/deltid', async (req, res) => {
 
             res.json(allJobs);
         }
+    } catch (error) {
+        console.error('Error fetching job links:', error);
+        res.status(500).json({ 
+            error: 'Failed to fetch job links',
+            details: error.message 
+        });
+    }
+});
+
+
+//hanterar ?q=sommar%20OR%20summer%20OR%20feriejobb
+//?q=feriejobb
+//?q=sommar
+//?q=summer
+app.get('/api/sjob/', async (req, res) => {
+    try {
+        if (Object.keys(req.query).length === 0) {
+            const response = await axios.get(JOB_LINKS_API);
+            return res.json(response.data);
+        }
+        
+        let allJobs = [];
+        const limit = 100;
+        let publishedBefore = null;
+
+        while (true) {
+            const params = { ...req.query, limit };
+            if (publishedBefore) {
+                params['published-before'] = publishedBefore;
+            }
+            const response = await axios.get(JOB_SEARCH_API, {
+                params,
+                headers: { 'Accept': 'application/json' }
+            });
+
+            const hits = response.data.hits || [];
+            if (hits.length === 0) break;
+
+            allJobs = allJobs.concat(hits);
+            // Sätt nästa "published-before" till datumet för sista träffen i batchen
+            publishedBefore = hits[hits.length - 1].publication_date;
+
+            if (hits.length < limit) break;
+        }
+        
+        res.json(allJobs);
     } catch (error) {
         console.error('Error fetching job links:', error);
         res.status(500).json({ 
