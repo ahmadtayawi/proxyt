@@ -16,7 +16,7 @@ jobs = scrape_jobs(
     country_indeed='Sweden',
 )
 
-@app.route('/api/jobs', methods=['GET'])
+@app.route('/api/ijobs', methods=['GET'])
 def get_jobs():
     data = jobs.to_dict(orient="records")
     return jsonify(data)
