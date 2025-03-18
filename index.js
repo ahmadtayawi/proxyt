@@ -1,9 +1,13 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const NodeCache = require('node-cache');
 const { all } = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+//cache med 15 minuter ttl 900 står för sekunder
+const jobsCache = new NodeCache({ stdTTL: 900 });
 
 // API-konstanter
 const JOB_SEARCH_API = 'https://jobsearch.api.jobtechdev.se/search';
@@ -22,11 +26,19 @@ app.get('/', (req, res) => {
 
 // Hämta jobbannonser baserat på sökning eller om ingen sökning sker
 app.get('/api/jobs', async (req, res) => {
-    try {
+    try { //cache
+        const cacheKey = `jobs_${JSON.stringify(req.query)}`;
+        const cachedResults = jobsCache.get(cacheKey);
+        if (cachedResults) {
+            console.log('Serving from cache:', cacheKey);
+            return res.json(cachedResults);
+        }
         if (Object.keys(req.query).length === 0) {
             // No search parameters, use JOB_LINKS_API
             const response = await axios.get(JOB_LINKS_API);
-            res.json(response.data);
+            jobsCache.set(cacheKey, response.data);
+            return res.json(response.data);
+            
         } else {
             // Search parameters exist, use JOB_SEARCH_API
             let allJobs = [];  // Changed from allJobLinks
@@ -61,7 +73,9 @@ app.get('/api/jobs', async (req, res) => {
             const filteredJobs = allJobs.filter(job =>  // Changed from allJobLinks
                 job.headline && regex.test(job.headline)
             );
-
+            
+            jobsCache.set(cacheKey, filteredJobs);
+            res.set('Cache-Control', 'public, max-age=900');
             res.json(filteredJobs);
         }
     } catch (error) {
@@ -74,10 +88,17 @@ app.get('/api/jobs', async (req, res) => {
 //https://proxyserver-production-fe16.up.railway.app/api/jobs/deltid?q=deltid
 app.get('/api/jobs/deltid', async (req, res) => {
     try {
+        const cacheKey = `deltid_jobs_${JSON.stringify(req.query)}`;
+        const cachedResults = jobsCache.get(cacheKey);
+        if (cachedResults) {
+            console.log('Serving from cache:', cacheKey);
+            return res.json(cachedResults);
+        }
         if (Object.keys(req.query).length === 0) {
             // No search parameters, use JOB_LINKS_API
             const response = await axios.get(JOB_LINKS_API);
-            res.json(response.data);
+            jobsCache.set(cacheKey, response.data);
+            return res.json(response.data);
         } else {
             // Search parameters exist, use JOB_SEARCH_API
             let allJobs = [];
@@ -107,7 +128,8 @@ app.get('/api/jobs/deltid', async (req, res) => {
                 page++;
 
             } while (allJobs.length < totalResults);
-
+            jobsCache.set(cacheKey, allJobs);
+            res.set('Cache-Control', 'public, max-age=900');
             res.json(allJobs);
         }
     } catch (error) {
@@ -126,8 +148,19 @@ app.get('/api/jobs/deltid', async (req, res) => {
 //?q=summer
 app.get('/api/sjob/', async (req, res) => {
     try {
+        const cacheKey = `sjob_${JSON.stringify(req.query)}`;
+        
+        // Kontrollera om resultaten finns i cachen
+        const cachedResults = jobsCache.get(cacheKey);
+        if (cachedResults) {
+            console.log('Serving from cache:', cacheKey);
+            return res.json(cachedResults);
+        }
+        
         if (Object.keys(req.query).length === 0) {
             const response = await axios.get(JOB_LINKS_API);
+            // Spara i cache innan svar
+            jobsCache.set(cacheKey, response.data);
             return res.json(response.data);
         }
         
@@ -154,7 +187,8 @@ app.get('/api/sjob/', async (req, res) => {
 
             if (hits.length < limit) break;
         }
-        
+        jobsCache.set(cacheKey, allJobs);
+        res.set('Cache-Control', 'public, max-age=900');
         res.json(allJobs);
     } catch (error) {
         console.error('Error fetching job links:', error);
@@ -164,6 +198,12 @@ app.get('/api/sjob/', async (req, res) => {
         });
     }
 });
+
+
+setInterval(() => {
+    console.log('Clearing job cache');
+    jobsCache.flushAll();
+}, 24 * 60 * 60 * 1000);
 
 // Starta servern
 app.listen(PORT, () => {
